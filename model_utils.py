@@ -27,7 +27,7 @@ def load_model_from_github(url):
     """
     filename = url.split('/')[-1]
     download_file_from_github_release(url, filename)
-    loaded_model = tf.keras.models.load_model(filename)
+    loaded_model = joblib.load(filename)
     return loaded_model
 
 def load_scaler_from_github(url):
