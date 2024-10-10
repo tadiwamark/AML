@@ -81,8 +81,9 @@ placeholder = st.empty()
 
 for i in range(1, 101):
     transaction, actual_label = get_live_data()
-    prediction_prob = gbc.predict_proba(transaction)[0][1]
-    prediction = gbc.predict(transaction)[0]
+    prediction_probs = model.predict_proba(transaction)[0]
+    prediction_prob = prediction_probs[1]  # Probability of the positive class (Is Laundering = 1)
+    prediction = model.predict(transaction)[0]
     result = 'Fraudulent Transaction Detected' if prediction == 1 else 'Normal Transaction'
     with placeholder.container():
         st.write(f"**Transaction {i}:**")
