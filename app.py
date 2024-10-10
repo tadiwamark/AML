@@ -1,58 +1,66 @@
+# app.py
+
 import streamlit as st
 import pandas as pd
 import numpy as np
-import joblib
 import random
 import time
+import os
 
-# Mount Google Drive
-from google.colab import drive
-drive.mount('/content/drive')
+# Import custom functions from model_utils.py
+from model_utils import (
+    load_model_from_github,
+    load_scaler_from_github,
+    load_training_columns_from_github,
+    load_dataset_from_github
+)
 
-# Define the path to the zip file
-zip_file_path = '/content/drive/MyDrive/datasets/dataset.zip'  # Adjust the path accordingly
+# URLs to resources
 
-# Extract the zip file
-import zipfile
+MODEL_URL = 'https://github.com/tadiwamark/AML/releases/download/gbc/gbc_aml_model.pkl'
+SCALER_URL = 'https://github.com/tadiwamark/AML/releases/download/gbc/scaler_gb.save'
+COLUMNS_URL = 'https://github.com/tadiwamark/AML/releases/download/gbc_training_columns/training_columns.pkl'
+DATASET_URL = 'https://github.com/tadiwamark/AML/blob/main/HI-Small_Trans.csv'
 
-with zipfile.ZipFile(zip_file_path, 'r') as zip_ref:
-    zip_ref.extractall('/content/dataset_folder')
+# Load the model, scaler, training columns, and dataset
+@st.cache_resource
+def load_resources():
+    gbc = load_model_from_github(MODEL_URL)
+    scaler = load_scaler_from_github(SCALER_URL)
+    training_columns = load_training_columns_from_github(COLUMNS_URL)
+    df = load_dataset_from_github(DATASET_URL)
+    return gbc, scaler, training_columns, df
 
-# Load the trained model, scaler, and training columns from Google Drive
-model_path = '/content/drive/MyDrive/models/gbc_aml_model.pkl'
-scaler_path = '/content/drive/MyDrive/models/scaler.save'
-columns_path = '/content/drive/MyDrive/models/training_columns.pkl'
-
-gbc = joblib.load(model_path)
-scaler = joblib.load(scaler_path)
-training_columns = joblib.load(columns_path)
-
-# Load the dataset
-dataset_path = '/content/dataset_folder/HI-Small_Trans.csv'
-df = pd.read_csv(dataset_path)
-df = df.drop_duplicates()
-df = df.dropna()
+gbc, scaler, training_columns, df = load_resources()
 
 # Preprocess the data
-df['Timestamp'] = pd.to_datetime(df['Timestamp'])
-df['Hour'] = df['Timestamp'].dt.hour
-df.drop(['Timestamp', 'From Bank', 'To Bank', 'Account', 'Account.1', 'Receiving Currency', 'Amount Received'], axis=1, inplace=True)
+def preprocess_data(df, scaler, training_columns):
+    df = df.drop_duplicates()
+    df = df.dropna()
 
-X = df.drop('Is Laundering', axis=1)
-y = df['Is Laundering']
+    df['Timestamp'] = pd.to_datetime(df['Timestamp'])
+    df['Hour'] = df['Timestamp'].dt.hour
+    df.drop(['Timestamp', 'From Bank', 'To Bank', 'Account', 'Account.1', 'Receiving Currency', 'Amount Received'], axis=1, inplace=True)
 
-# One-hot encoding
-X = pd.get_dummies(X, columns=['Payment Currency', 'Payment Format'], drop_first=True)
+    X = df.drop('Is Laundering', axis=1)
+    y = df['Is Laundering']
 
-# Align columns with the trained model
-missing_cols = set(training_columns) - set(X.columns)
-for col in missing_cols:
-    X[col] = 0
-X = X[training_columns]
+    # One-hot encoding
+    X = pd.get_dummies(X, columns=['Payment Currency', 'Payment Format'], drop_first=True)
 
-# Scaling
-numeric_cols = ['Amount Paid', 'Hour']
-X[numeric_cols] = scaler.transform(X[numeric_cols])
+    # Align columns with the trained model
+    missing_cols = set(training_columns) - set(X.columns)
+    for col in missing_cols:
+        X[col] = 0
+    X = X[training_columns]
+
+    # Scaling
+    numeric_cols = ['Amount Paid', 'Hour']
+    X[numeric_cols] = scaler.transform(X[numeric_cols])
+
+    return X, y
+
+X, y = preprocess_data(df, scaler, training_columns)
 
 # Function to simulate real-time data
 def get_live_data():
