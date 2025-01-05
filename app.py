@@ -3,19 +3,33 @@ import pandas as pd
 import numpy as np
 import tensorflow as tf
 from sklearn.preprocessing import StandardScaler
+import os
+import requests
 import time
 import matplotlib.pyplot as plt
 
-# Load the model and scaler
+# Download and load the model
 @st.cache_resource
 def load_model():
-    model = tf.keras.models.load_model('https://github.com/tadiwamark/AML/releases/download/dnn_aml/dnn_aml_model.h5') 
-    return model
+    model_url = "https://github.com/tadiwamark/AML/releases/download/dnn_aml/dnn_aml_model.h5"
+    model_path = "dnn_aml_model.h5"
+
+    if not os.path.exists(model_path):
+        with st.spinner("Downloading model..."):
+            response = requests.get(model_url, stream=True)
+            if response.status_code == 200:
+                with open(model_path, "wb") as f:
+                    for chunk in response.iter_content(chunk_size=1024):
+                        f.write(chunk)
+            else:
+                st.error("Failed to download model. Please check the URL.")
+                return None
+
+    return tf.keras.models.load_model(model_path)
 
 @st.cache_resource
 def load_scaler():
-    scaler = StandardScaler()
-    return scaler
+    return StandardScaler()
 
 model = load_model()
 scaler = load_scaler()
