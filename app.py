@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 # Load the model and scaler
 @st.cache_resource
 def load_model():
-    model = tf.keras.models.load_model('https://github.com/your-repo/your-model.h5')  # Replace with actual URL
+    model = tf.keras.models.load_model('https://github.com/tadiwamark/AML/releases/download/dnn_aml/dnn_aml_model.h5') 
     return model
 
 @st.cache_resource
