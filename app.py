@@ -2,18 +2,19 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import tensorflow as tf
-from sklearn.preprocessing import StandardScaler
-import os
+from sklearn.preprocessing import LabelEncoder, StandardScaler
 import requests
+import os
 import time
 import matplotlib.pyplot as plt
 
+# Set Streamlit page configuration
 st.set_page_config(page_title="Real-Time AML Transaction Monitor", layout="wide")
 
 # Download and load the model
 @st.cache_resource
 def load_model():
-    model_url = "https://github.com/tadiwamark/AML/releases/download/dnn_aml/dnn_aml_model.h5"
+    model_url = "https://github.com/tadiwamark/AML/releases/download/dnn_aml/dnn_aml_model.h5"  # Replace with your URL
     model_path = "dnn_aml_model.h5"
 
     if not os.path.exists(model_path):
@@ -24,20 +25,13 @@ def load_model():
                     for chunk in response.iter_content(chunk_size=1024):
                         f.write(chunk)
             else:
-                st.error("Failed to download model. Please check the URL.")
+                st.error("Failed to download model. Check the URL.")
                 return None
 
     return tf.keras.models.load_model(model_path)
 
-@st.cache_resource
-def load_scaler():
-    return StandardScaler()
-
-model = load_model()
-scaler = load_scaler()
-
-# Preprocessing function
-def preprocess_data(data, scaler):
+# Preprocess data
+def preprocess_data(data, scaler, encoder):
     # Convert 'Timestamp' to datetime and extract features
     data['Timestamp'] = pd.to_datetime(data['Timestamp'])
     data['Year'] = data['Timestamp'].dt.year
@@ -47,16 +41,22 @@ def preprocess_data(data, scaler):
     data['Minute'] = data['Timestamp'].dt.minute
     data = data.drop(columns=['Timestamp'])
 
-    # Label encode Account and Account.1 columns (as in training)
-    data['Account'] = data['Account'].astype(str).apply(lambda x: hash(x) % (10 ** 6))
-    data['Account.1'] = data['Account.1'].astype(str).apply(lambda x: hash(x) % (10 ** 6))
+    # Encode categorical variables
+    categorical_columns = ['Receiving Currency', 'Payment Currency', 'Payment Format']
+    for col in categorical_columns:
+        data[col] = data[col].map({'USD': 0, 'EUR': 1, 'GBP': 2, 'Wire': 0, 'Credit Card': 1, 'Cheque': 2, 'Reinvestment': 3})
 
-    # Scale numerical features
+    # Encode account columns using hash encoding
+    data['Account'] = data['Account'].astype(str).apply(lambda x: hash(x) % (10**6))
+    data['Account.1'] = data['Account.1'].astype(str).apply(lambda x: hash(x) % (10**6))
+
+    # Scale numerical columns
     numeric_columns = ['Amount Received', 'Amount Paid']
     data[numeric_columns] = scaler.fit_transform(data[numeric_columns])
+
     return data
 
-# Generate real-time transactions
+# Generate simulated transactions
 def generate_transactions(num_transactions):
     np.random.seed(42)
     return pd.DataFrame({
@@ -72,13 +72,16 @@ def generate_transactions(num_transactions):
         'Payment Format': np.random.choice(['Wire', 'Credit Card', 'Cheque', 'Reinvestment'], num_transactions)
     })
 
+# Initialize resources
+model = load_model()
+scaler = StandardScaler()
 
-
+# Streamlit UI
 st.title("💸 Real-Time Anti-Money Laundering (AML) Monitor")
 st.sidebar.title("Settings")
 st.sidebar.markdown("Configure transaction simulation settings.")
 
-# Settings
+# Simulation settings
 batch_size = st.sidebar.slider("Batch Size", min_value=10, max_value=100, value=60, step=10)
 refresh_interval = st.sidebar.slider("Refresh Interval (seconds)", min_value=1, max_value=10, value=5, step=1)
 
@@ -88,15 +91,15 @@ if "transactions" not in st.session_state:
 if "flagged" not in st.session_state:
     st.session_state["flagged"] = pd.DataFrame()
 
-# Main simulation
+# Simulation and processing
 with st.container():
     st.header("📊 Real-Time Transactions")
-    st.write("Simulating real-time transactions and processing them to detect suspicious activity.")
+    st.write("Simulating and processing transactions in real-time to detect suspicious activity.")
 
     transactions = generate_transactions(batch_size)
-    preprocessed_data = preprocess_data(transactions, scaler)
+    preprocessed_data = preprocess_data(transactions, scaler, LabelEncoder())
 
-    # Run model predictions
+    # Predict using the loaded model
     predictions = (model.predict(preprocessed_data) > 0.5).astype(int)
     transactions['Is Laundering'] = predictions
 
@@ -121,7 +124,7 @@ with st.container():
 # Visualization
 with st.container():
     st.header("📈 Insights")
-    st.write("Visualizations of the transaction data and flagged anomalies.")
+    st.write("Visualizations of transaction data and flagged anomalies.")
 
     col1, col2 = st.columns(2)
 
