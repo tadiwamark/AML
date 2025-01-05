@@ -8,6 +8,8 @@ import requests
 import time
 import matplotlib.pyplot as plt
 
+st.set_page_config(page_title="Real-Time AML Transaction Monitor", layout="wide")
+
 # Download and load the model
 @st.cache_resource
 def load_model():
@@ -70,8 +72,7 @@ def generate_transactions(num_transactions):
         'Payment Format': np.random.choice(['Wire', 'Credit Card', 'Cheque', 'Reinvestment'], num_transactions)
     })
 
-# Streamlit UI
-st.set_page_config(page_title="Real-Time AML Transaction Monitor", layout="wide")
+
 
 st.title("💸 Real-Time Anti-Money Laundering (AML) Monitor")
 st.sidebar.title("Settings")
