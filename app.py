@@ -2,10 +2,11 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import tensorflow as tf
-from sklearn.preprocessing import LabelEncoder, StandardScaler
+from sklearn.preprocessing import StandardScaler
 import requests
 import os
 import time
+import random
 import matplotlib.pyplot as plt
 
 # Set Streamlit page configuration
@@ -31,7 +32,7 @@ def load_model():
     return tf.keras.models.load_model(model_path)
 
 # Preprocess data
-def preprocess_data(data, scaler, encoder):
+def preprocess_data(data, scaler):
     # Convert 'Timestamp' to datetime and extract features
     data['Timestamp'] = pd.to_datetime(data['Timestamp'])
     data['Year'] = data['Timestamp'].dt.year
@@ -57,10 +58,10 @@ def preprocess_data(data, scaler, encoder):
     return data
 
 # Generate simulated transactions
-def generate_transactions(num_transactions):
-    np.random.seed(42)
-    return pd.DataFrame({
-        'Timestamp': pd.date_range(start='2022-01-01', periods=num_transactions, freq='T'),
+def generate_transactions(num_transactions, anomaly_rate=0.1):
+    np.random.seed(int(time.time()))
+    transactions = pd.DataFrame({
+        'Timestamp': pd.date_range(start=pd.Timestamp.now(), periods=num_transactions, freq='T'),
         'From Bank': np.random.randint(1, 1000, num_transactions),
         'Account': [f'8000{np.random.randint(1000, 9999)}' for _ in range(num_transactions)],
         'To Bank': np.random.randint(1, 1000, num_transactions),
@@ -71,6 +72,16 @@ def generate_transactions(num_transactions):
         'Payment Currency': np.random.choice(['USD', 'EUR', 'GBP'], num_transactions),
         'Payment Format': np.random.choice(['Wire', 'Credit Card', 'Cheque', 'Reinvestment'], num_transactions)
     })
+
+    # Introduce anomalies
+    num_anomalies = int(num_transactions * anomaly_rate)
+    if num_anomalies > 0:
+        anomaly_indices = random.sample(range(num_transactions), num_anomalies)
+        for idx in anomaly_indices:
+            transactions.loc[idx, 'Amount Received'] = np.random.uniform(10000, 50000)  # Unusually high amounts
+            transactions.loc[idx, 'From Bank'] = transactions.loc[idx, 'To Bank']  # Same source and destination
+
+    return transactions
 
 # Initialize resources
 model = load_model()
@@ -84,6 +95,7 @@ st.sidebar.markdown("Configure transaction simulation settings.")
 # Simulation settings
 batch_size = st.sidebar.slider("Batch Size", min_value=10, max_value=100, value=60, step=10)
 refresh_interval = st.sidebar.slider("Refresh Interval (seconds)", min_value=1, max_value=10, value=5, step=1)
+anomaly_rate = st.sidebar.slider("Anomaly Rate (%)", min_value=0, max_value=50, value=10, step=5) / 100
 
 # Data storage
 if "transactions" not in st.session_state:
@@ -96,16 +108,16 @@ with st.container():
     st.header("📊 Real-Time Transactions")
     st.write("Simulating and processing transactions in real-time to detect suspicious activity.")
 
-    transactions = generate_transactions(batch_size)
-    preprocessed_data = preprocess_data(transactions, scaler, LabelEncoder())
+    transactions = generate_transactions(batch_size, anomaly_rate)
+    preprocessed_data = preprocess_data(transactions, scaler)
 
     # Predict using the loaded model
     predictions = (model.predict(preprocessed_data) > 0.5).astype(int)
     transactions['Is Laundering'] = predictions
 
-    # Append flagged transactions
-    flagged_transactions = transactions[transactions['Is Laundering'] == 1]
+    # Append new transactions to session state
     st.session_state["transactions"] = pd.concat([st.session_state["transactions"], transactions])
+    flagged_transactions = transactions[transactions['Is Laundering'] == 1]
     st.session_state["flagged"] = pd.concat([st.session_state["flagged"], flagged_transactions])
 
     # Display recent transactions
@@ -130,22 +142,28 @@ with st.container():
 
     with col1:
         st.subheader("Transaction Amount Distribution")
-        fig, ax = plt.subplots()
-        st.session_state["transactions"]['Amount Received'].hist(ax=ax, bins=20)
-        ax.set_title("Transaction Amount Distribution")
-        ax.set_xlabel("Amount Received")
-        ax.set_ylabel("Frequency")
-        st.pyplot(fig)
+        if not st.session_state["transactions"].empty:
+            fig, ax = plt.subplots()
+            st.session_state["transactions"]['Amount Received'].hist(ax=ax, bins=20)
+            ax.set_title("Transaction Amount Distribution")
+            ax.set_xlabel("Amount Received")
+            ax.set_ylabel("Frequency")
+            st.pyplot(fig)
+        else:
+            st.info("No transactions available for distribution.")
 
     with col2:
         st.subheader("Flagged Transactions by Hour")
-        flagged_by_hour = st.session_state["flagged"]['Hour'].value_counts().sort_index()
-        fig, ax = plt.subplots()
-        flagged_by_hour.plot(kind='bar', ax=ax)
-        ax.set_title("Flagged Transactions by Hour")
-        ax.set_xlabel("Hour")
-        ax.set_ylabel("Count")
-        st.pyplot(fig)
+        if not st.session_state["flagged"].empty:
+            flagged_by_hour = st.session_state["flagged"]['Hour'].value_counts().sort_index()
+            fig, ax = plt.subplots()
+            flagged_by_hour.plot(kind='bar', ax=ax)
+            ax.set_title("Flagged Transactions by Hour")
+            ax.set_xlabel("Hour")
+            ax.set_ylabel("Count")
+            st.pyplot(fig)
+        else:
+            st.info("No flagged transactions to display.")
 
 # Auto-refresh
 time.sleep(refresh_interval)
