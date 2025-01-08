@@ -58,8 +58,15 @@ def preprocess_data(data, scaler):
     return data
 
 # Generate simulated transactions
+import pandas as pd
+import numpy as np
+import time
+import random
+
 def generate_transactions(num_transactions, anomaly_rate=0.1):
     np.random.seed(int(time.time()))
+    
+    # Generate base transactions
     transactions = pd.DataFrame({
         'Timestamp': pd.date_range(start=pd.Timestamp.now(), periods=num_transactions, freq='T'),
         'From Bank': np.random.randint(1, 1000, num_transactions),
@@ -73,15 +80,25 @@ def generate_transactions(num_transactions, anomaly_rate=0.1):
         'Payment Format': np.random.choice(['Wire', 'Credit Card', 'Cheque', 'Reinvestment'], num_transactions)
     })
 
+    # Ensure Amount Received matches Amount Paid
+    transactions['Amount Paid'] = transactions['Amount Received']
+
+    # Ensure Receiving Currency matches Payment Currency
+    transactions['Payment Currency'] = transactions['Receiving Currency']
+
     # Introduce anomalies
     num_anomalies = int(num_transactions * anomaly_rate)
     if num_anomalies > 0:
         anomaly_indices = random.sample(range(num_transactions), num_anomalies)
         for idx in anomaly_indices:
-            transactions.loc[idx, 'Amount Received'] = np.random.uniform(10000, 50000)  # Unusually high amounts
+            # Laundered transactions are across the same currency but anomalously high amounts
+            transactions.loc[idx, 'Amount Received'] = np.random.uniform(10000, 50000)
+            transactions.loc[idx, 'Amount Paid'] = transactions.loc[idx, 'Amount Received']
+            transactions.loc[idx, 'Receiving Currency'] = transactions.loc[idx, 'Payment Currency']
             transactions.loc[idx, 'From Bank'] = transactions.loc[idx, 'To Bank']  # Same source and destination
 
     return transactions
+
 
 # Initialize resources
 model = load_model()
