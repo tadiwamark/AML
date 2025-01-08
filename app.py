@@ -167,4 +167,4 @@ with st.container():
 
 # Auto-refresh
 time.sleep(refresh_interval)
-st.experimental_rerun()
+st.rerun()
